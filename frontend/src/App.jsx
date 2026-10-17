@@ -33,12 +33,12 @@ export default function App() {
     setLoading(true); setError(""); setMessage(""); setResult(null);
     try {
       const form = new FormData(); form.append("file", file);
-      const response = await fetch(`${API_URL}/upload`, { method: "POST", body: form });
+      const response = await fetch(`${API_URL}/analyze`, { method: "POST", body: form });
       const raw = await response.text();
       let data;
       try { data = raw ? JSON.parse(raw) : {}; } catch { data = { detail: raw }; }
       if (!response.ok) throw new Error(data.detail || data.message || `Upload failed (${response.status})`);
-      setResult(data); setMessage("Upload complete");
+      setResult(data); setMessage("AI analysis complete");
     } catch (err) {
       setError(err instanceof TypeError
         ? "Could not connect. The free backend may be waking up—wait 30–60 seconds and retry."
@@ -75,8 +75,25 @@ export default function App() {
           </button> : <div className="preview-panel"><img src={preview} alt="Selected skin image preview"/><div className="preview-caption"><span className="file-icon">IMG</span><span className="filename"><b>{file?.name}</b><small>{(file.size/1024/1024).toFixed(2)} MB · Ready</small></span><button type="button" className="remove" onClick={resetUpload} aria-label="Remove image">×</button></div></div>}
         </div>
         {error && <div className="feedback error" role="alert"><b>Upload needs attention</b><span>{error}</span></div>}
-        {message && <div className="feedback success" role="status"><b>✓ {message}</b><span>{result?.message || result?.filename || "The backend received your image."}</span></div>}
-        <form onSubmit={uploadImage}><button className="submit" disabled={!file || loading}>{loading ? <><span className="spinner"></span> Uploading image…</> : <>Upload image <span>↗</span></>}</button></form>
+        {message && <div className="feedback success analysis-result" role="status">
+  <b>✓ {message}</b>
+  <div className="result-primary">
+    <span>Top prediction</span>
+    <strong>{String(result?.prediction || "Result unavailable").replaceAll("_", " ")}</strong>
+    {Number.isFinite(Number(result?.confidence)) && result?.confidence != null &&
+      <small>Model confidence: {(Number(result.confidence) * 100).toFixed(1)}%</small>}
+  </div>
+  {Array.isArray(result?.predictions) && result.predictions.length > 0 &&
+    <div className="prediction-list">
+      <b>Top predictions</b>
+      {result.predictions.map((item, index) => <div className="prediction-row" key={`${item.label}-${index}`}>
+        <span>{String(item.label || "Unknown").replaceAll("_", " ")}</span>
+        <span>{(Number(item.confidence || 0) * 100).toFixed(1)}%</span>
+      </div>)}
+    </div>}
+  <small>{result?.disclaimer || "Experimental research output only; not a medical diagnosis."}</small>
+</div>}
+        <form onSubmit={uploadImage}><button className="submit" disabled={!file || loading}>{loading ? <><span className="spinner"></span> Uploading image…</> : <>Analyze image <span>↗</span></>}</button></form>
         <div className="workspace-foot"><span>▣ Image upload</span><span>5 MB limit</span><span>⌁ API connected</span></div>
       </div>
       <div className="decor decor-one"></div><div className="decor decor-two"></div>
