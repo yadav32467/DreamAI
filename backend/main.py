@@ -137,80 +137,73 @@ async def upload_image(file: UploadFile = File(...)):
         await file.close()
 
 # AI skin-image classification endpoint (research/educational prototype only)
+
 @app.post("/analyze")
 async def analyze_skin(file: UploadFile = File(...)):
+    import tempfile
     import os
-    import requests
-    from io import BytesIO
-    from PIL import Image, UnidentifiedImageError
-    from fastapi import HTTPException
+    from pathlib import Path
+    from gradio_client import Client, handle_file
 
-    allowed_types = {"image/jpeg", "image/png", "image/webp"}
-    if file.content_type not in allowed_types:
-        raise HTTPException(status_code=400, detail="Please upload a JPG, PNG, or WEBP image.")
+    if file.content_type not in {"image/jpeg", "image/png", "image/webp"}:
+        raise HTTPException(status_code=400, detail="Upload a JPG, PNG, or WEBP image.")
 
-    image_bytes = await file.read()
-    if not image_bytes:
-        raise HTTPException(status_code=400, detail="The uploaded image is empty.")
-    if len(image_bytes) > 5 * 1024 * 1024:
-        raise HTTPException(status_code=413, detail="Image must be 5 MB or smaller.")
+    content = await file.read()
+    if not content or len(content) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Image must be non-empty and no larger than 5 MB.")
+
+    suffix = Path(file.filename or "image.jpg").suffix.lower()
+    if suffix not in {".jpg", ".jpeg", ".png", ".webp"}:
+        suffix = ".jpg"
+
+    temp_path = None
     try:
-        img = Image.open(BytesIO(image_bytes))
-        img.verify()
-    except (UnidentifiedImageError, OSError):
-        raise HTTPException(status_code=400, detail="That file is not a valid image.")
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            tmp.write(content)
+            temp_path = tmp.name
 
-    token = os.getenv("HF_TOKEN")
-    if not token:
-        raise HTTPException(status_code=503, detail="AI is not configured yet. Add HF_TOKEN to Render Environment Variables.")
+        client = Client("Satyejeet69/SkinDiseaseClassifier")
+        result = client.predict(handle_file(temp_path), api_name="/predict")
 
-    model_id = os.getenv("HF_SKIN_MODEL", "LaurianeMD/vit-skin-disease")
-    endpoint = f"https://router.huggingface.co/hf-inference/models/{model_id}"
-    try:
-        response = requests.post(
-            endpoint,
-            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/octet-stream"},
-            data=image_bytes,
-            timeout=90,
-        )
-    except requests.RequestException:
-        raise HTTPException(status_code=502, detail="AI provider could not be reached. Please try again shortly.")
-
-    if response.status_code in (401, 403):
-        raise HTTPException(status_code=502, detail="Hugging Face rejected the token. Check HF_TOKEN and its Inference Providers permission in Render.")
-    if response.status_code == 503:
-        raise HTTPException(status_code=503, detail="The AI model is loading or is not currently available. Please retry in a minute.")
-    if response.status_code >= 400:
-        detail = "The selected model is not available through this inference provider. Check HF_SKIN_MODEL or use a model enabled for HF Inference."
-        try:
-            provider_detail = response.json().get("error")
-            if provider_detail:
-                detail = str(provider_detail)[:400]
-        except Exception:
-            pass
-        raise HTTPException(status_code=502, detail=detail)
-
-    try:
-        predictions = response.json()
-        if isinstance(predictions, dict):
-            predictions = predictions.get("predictions", predictions.get("results", []))
-        if not isinstance(predictions, list) or not predictions:
+        if isinstance(result, dict):
+            items = result.items()
+        elif isinstance(result, list):
+            items = result
+        else:
             raise ValueError("Unexpected model response")
-        cleaned = []
-        for item in predictions[:5]:
-            if isinstance(item, dict) and "label" in item:
-                cleaned.append({"label": str(item["label"]), "score": round(float(item.get("score", 0)), 4)})
-        if not cleaned:
-            raise ValueError("No prediction labels returned")
-        top = cleaned[0]
-    except Exception:
-        raise HTTPException(status_code=502, detail="The AI model returned an unexpected response. Please try again.")
 
-    return {
-        "model": model_id,
-        "prediction": top["label"],
-        "confidence": top["score"],
-        "predictions": cleaned,
-        "disclaimer": "AI research result only, not a medical diagnosis. Image classifiers can be wrong; consult a qualified dermatologist for medical concerns."
-    }
+        predictions = []
+        for item in items:
+            if isinstance(item, (tuple, list)) and len(item) >= 2:
+                label, score = item[0], item[1]
+            elif isinstance(item, dict):
+                label = item.get("label", item.get("key", "Unknown"))
+                score = item.get("confidence", item.get("score", item.get("value", 0)))
+            else:
+                continue
+            try:
+                predictions.append({"label": str(label), "confidence": float(score)})
+            except (TypeError, ValueError):
+                continue
 
+        predictions.sort(key=lambda x: x["confidence"], reverse=True)
+        if not predictions:
+            raise ValueError("No predictions returned")
+
+        return {
+            "prediction": predictions[0]["label"],
+            "confidence": round(predictions[0]["confidence"], 4),
+            "predictions": predictions[:3],
+            "model": "Satyejeet69/SkinDiseaseClassifier",
+            "disclaimer": "Research demo for skin-lesion images only; not a medical diagnosis."
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Free AI demo is temporarily unavailable or returned an unexpected result.") from exc
+    finally:
+        if temp_path:
+            try:
+                os.unlink(temp_path)
+            except OSError:
+                pass
