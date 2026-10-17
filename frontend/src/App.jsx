@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import "./App.css";
 
-const API_URL = "http://127.0.0.1:8000";
-
+const API_URL = "https://dermai-api-r2in.onrender.com";
 export default function App() {
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState("");
