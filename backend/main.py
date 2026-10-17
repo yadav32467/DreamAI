@@ -165,26 +165,46 @@ async def analyze_skin(file: UploadFile = File(...)):
         client = Client("Satyejeet69/SkinDiseaseClassifier")
         result = client.predict(handle_file(temp_path), api_name="/predict")
 
+        predictions = []
+
         if isinstance(result, dict):
-            items = result.items()
+            raw_predictions = result.get("confidences") or []
+            for item in raw_predictions:
+                if isinstance(item, dict):
+                    label = item.get("label", "Unknown")
+                    score = item.get("confidence", 0)
+                    try:
+                        predictions.append({
+                            "label": str(label),
+                            "confidence": float(score)
+                        })
+                    except (TypeError, ValueError):
+                        continue
+
+            if not predictions and result.get("label") is not None:
+                predictions.append({
+                    "label": str(result["label"]),
+                    "confidence": 0.0
+                })
+
         elif isinstance(result, list):
-            items = result
+            for item in result:
+                if isinstance(item, dict):
+                    label = item.get("label", "Unknown")
+                    score = item.get("confidence", item.get("score", 0))
+                    try:
+                        predictions.append({
+                            "label": str(label),
+                            "confidence": float(score)
+                        })
+                    except (TypeError, ValueError):
+                        continue
+
         else:
             raise ValueError("Unexpected model response")
 
-        predictions = []
-        for item in items:
-            if isinstance(item, (tuple, list)) and len(item) >= 2:
-                label, score = item[0], item[1]
-            elif isinstance(item, dict):
-                label = item.get("label", item.get("key", "Unknown"))
-                score = item.get("confidence", item.get("score", item.get("value", 0)))
-            else:
-                continue
-            try:
-                predictions.append({"label": str(label), "confidence": float(score)})
-            except (TypeError, ValueError):
-                continue
+        if not predictions:
+            raise ValueError("No predictions returned")
 
         predictions.sort(key=lambda x: x["confidence"], reverse=True)
         if not predictions:
