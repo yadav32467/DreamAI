@@ -19,12 +19,12 @@ app = FastAPI(title="DermAI API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173","https://derm-1.netlify.app"],
+    allow_origins=["http://localhost:5173","http://localhost:5174","https://derm-1.netlify.app"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
+ 
 MAX_FILE_SIZE = 5 * 1024 * 1024
 ALLOWED_FORMATS = {"JPEG", "PNG", "WEBP"}
 
