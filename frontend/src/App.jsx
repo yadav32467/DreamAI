@@ -1,236 +1,158 @@
-import { useEffect, useState } from "react";
+import { useRef, useState } from "react";
 import "./App.css";
 
 const API_URL = "https://dermai-api-r2in.onrender.com";
+const MAX_SIZE = 5 * 1024 * 1024;
+const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"];
+
 export default function App() {
+  const inputRef = useRef(null);
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState("");
+  const [dragging, setDragging] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState(null);
+  const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [result, setResult] = useState(null);
 
-  useEffect(() => {
-    return () => {
-      if (preview) URL.revokeObjectURL(preview);
-    };
-  }, [preview]);
-
-  function handleFileChange(event) {
-    const selected = event.target.files?.[0];
-    setResult(null);
+  function chooseFile(nextFile) {
     setError("");
-
-    if (!selected) {
-      setFile(null);
-      setPreview("");
-      return;
-    }
-
-    const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
-    if (!allowedTypes.includes(selected.type)) {
-      setFile(null);
-      setPreview("");
+    setMessage("");
+    setResult(null);
+    if (!nextFile) return;
+    if (!ACCEPTED_TYPES.includes(nextFile.type)) {
       setError("Please choose a JPG, PNG, or WEBP image.");
-      event.target.value = "";
       return;
     }
-
-    if (selected.size > 5 * 1024 * 1024) {
-      setFile(null);
-      setPreview("");
+    if (nextFile.size > MAX_SIZE) {
       setError("Image must be 5 MB or smaller.");
-      event.target.value = "";
       return;
     }
-
-    setFile(selected);
-    setPreview(URL.createObjectURL(selected));
+    if (preview) URL.revokeObjectURL(preview);
+    setFile(nextFile);
+    setPreview(URL.createObjectURL(nextFile));
   }
 
-  async function uploadImage() {
-    if (!file) {
-      setError("Choose an image before uploading.");
-      return;
-    }
+  function resetUpload() {
+    if (preview) URL.revokeObjectURL(preview);
+    setFile(null);
+    setPreview("");
+    setError("");
+    setMessage("");
+    setResult(null);
+    if (inputRef.current) inputRef.current.value = "";
+  }
 
+  async function uploadImage(event) {
+    event.preventDefault();
+    if (!file || loading) return;
     setLoading(true);
     setError("");
+    setMessage("");
     setResult(null);
-
     try {
       const formData = new FormData();
       formData.append("file", file);
-
       const response = await fetch(`${API_URL}/upload`, {
         method: "POST",
         body: formData,
       });
-
+      const raw = await response.text();
       let data;
-      try {
-        data = await response.json();
-      } catch {
-        throw new Error("The backend returned an unreadable response.");
-      }
-
+      try { data = raw ? JSON.parse(raw) : {}; } catch { data = { detail: raw }; }
       if (!response.ok) {
-        const detail = Array.isArray(data.detail)
-          ? data.detail.map((item) => item.msg).join(", ")
-          : data.detail;
-        throw new Error(detail || `Upload failed (${response.status}).`);
+        throw new Error(data.detail || data.message || `Upload failed (${response.status})`);
       }
-
       setResult(data);
+      setMessage("Image uploaded successfully.");
     } catch (err) {
-      setError(
-        err.message?.includes("Failed to fetch")
-          ? "Cannot connect to DermAI backend. Make sure the backend is running at http://127.0.0.1:8000."
-          : err.message || "Upload failed. Please try again."
-      );
+      if (err instanceof TypeError) {
+        setError("Could not connect to DermAI. The free backend may be waking up—wait 30–60 seconds and try again.");
+      } else {
+        setError(err.message || "Something went wrong. Please try again.");
+      }
     } finally {
       setLoading(false);
     }
   }
 
-  function resetForm() {
-    setFile(null);
-    setPreview("");
-    setResult(null);
-    setError("");
-    const input = document.getElementById("image-input");
-    if (input) input.value = "";
-  }
-
   return (
-    <div className="page-shell">
-      <header className="topbar">
-        <a className="brand" href="/" aria-label="DermAI home">
-          <span className="brand-mark">D<span>+</span></span>
-          <span className="brand-copy">
-            <strong>DermAI</strong>
-            <small>SKIN IMAGE WORKSPACE</small>
-          </span>
+    <main className="app-shell">
+      <nav className="topbar">
+        <a className="brand" href="#top" aria-label="DermAI home">
+          <span className="brand-mark">✳</span><span>Derm<span className="brand-accent">AI</span></span>
         </a>
-        <span className="local-pill"><span className="status-dot" /> Local MVP</span>
-      </header>
+        <span className="topbar-label"><span className="status-dot" /> Skin image assistant</span>
+      </nav>
 
-      <main className="main-content">
-        <section className="intro">
-          <p className="eyebrow">A SIMPLE START FOR SKIN IMAGE MANAGEMENT</p>
-          <h1>Every image starts<br /><span>with a clear record.</span></h1>
-          <p className="intro-copy">
-            Upload an image to create a case record. Your file is validated
-            and saved by the local DermAI backend.
-          </p>
-          <div className="feature-row">
-            <span><b>01</b> Image validation</span>
-            <span><b>02</b> Local storage</span>
-            <span><b>03</b> Case record</span>
+      <section className="hero" id="top">
+        <div className="hero-copy">
+          <div className="eyebrow"><span className="eyebrow-line" /> YOUR SKINCARE COMPANION</div>
+          <h1>A clearer picture<br />of your <span>skin health.</span></h1>
+          <p className="hero-description">Upload a skin image to get started. DermAI securely sends your image to the app backend for processing.</p>
+          <div className="trust-row">
+            <span><span className="check-icon">✓</span> Simple upload</span>
+            <span><span className="check-icon">✓</span> JPG, PNG, WEBP</span>
+            <span><span className="check-icon">✓</span> Up to 5 MB</span>
           </div>
-        </section>
+        </div>
 
-        <section className="workspace">
-          <div className="workspace-heading">
-            <div>
-              <p className="section-kicker">NEW CASE</p>
-              <h2>Upload skin image</h2>
-            </div>
-            <span className="step-number">STEP 01 / 01</span>
+        <section className="upload-card" aria-label="Upload a skin image">
+          <div className="card-heading">
+            <div><p className="step-label">GET STARTED</p><h2>Upload an image</h2></div>
+            <div className="upload-symbol" aria-hidden="true">↑</div>
           </div>
-
-          <label className={`dropzone ${preview ? "has-preview" : ""}`} htmlFor="image-input">
-            {preview ? (
-              <>
-                <img className="image-preview" src={preview} alt="Selected image preview" />
-                <span className="change-image">Choose a different image</span>
-              </>
-            ) : (
-              <div className="empty-state">
-                <span className="upload-symbol" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none">
-                    <path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M5 15.5v3A1.5 1.5 0 006.5 20h11a1.5 1.5 0 001.5-1.5v-3" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </span>
-                <strong>Choose an image to upload</strong>
-                <span>Click here to browse files on your Mac</span>
-                <small>JPG, PNG or WEBP · Maximum 5 MB</small>
-              </div>
-            )}
+          <form onSubmit={uploadImage}>
             <input
-              id="image-input"
+              ref={inputRef}
+              className="visually-hidden"
               type="file"
               accept="image/jpeg,image/png,image/webp"
-              onChange={handleFileChange}
+              onChange={(event) => chooseFile(event.target.files?.[0])}
             />
-          </label>
-
-          {file && (
-            <div className="file-row">
-              <span className="file-icon">IMG</span>
-              <span className="file-info">
-                <strong>{file.name}</strong>
-                <small>{(file.size / 1024 / 1024).toFixed(2)} MB · Ready to upload</small>
-              </span>
-              <button className="text-button" type="button" onClick={resetForm}>Remove</button>
-            </div>
-          )}
-
-          {error && <div className="notice error-notice" role="alert">{error}</div>}
-
-          <button className="upload-button" onClick={uploadImage} disabled={!file || loading}>
-            {loading ? (
-              <><span className="spinner" /> Uploading image...</>
+            {!preview ? (
+              <button
+                type="button"
+                className={`dropzone ${dragging ? "dropzone-active" : ""}`}
+                onClick={() => inputRef.current?.click()}
+                onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
+                onDragLeave={() => setDragging(false)}
+                onDrop={(event) => { event.preventDefault(); setDragging(false); chooseFile(event.dataTransfer.files?.[0]); }}
+              >
+                <span className="cloud-icon" aria-hidden="true">⇧</span>
+                <strong>Drop your image here</strong>
+                <span className="dropzone-sub">or click to browse files</span>
+                <span className="file-types">JPG · PNG · WEBP</span>
+              </button>
             ) : (
-              <>Upload image <span aria-hidden="true">↗</span></>
+              <div className="preview-wrap">
+                <img className="image-preview" src={preview} alt="Selected image preview" />
+                <div className="preview-meta"><span className="file-badge">IMG</span><div className="file-info"><strong>{file?.name}</strong><span>{(file.size / 1024 / 1024).toFixed(2)} MB · Ready to upload</span></div><button className="remove-button" type="button" onClick={resetUpload} aria-label="Remove image">×</button></div>
+              </div>
             )}
-          </button>
 
-          <p className="privacy-note">
-            <span aria-hidden="true">⌑</span> Image is sent to your local development server.
-            Do not use identifiable patient images for testing.
-          </p>
+            {error && <div className="notice notice-error" role="alert"><strong>Something went wrong</strong><span>{error}</span></div>}
+            {message && <div className="notice notice-success" role="status"><strong>✓ {message}</strong><span>{result?.message || result?.filename || "Your image was received by the backend."}</span></div>}
 
-          {result && (
-            <section className="success-panel" aria-live="polite">
-              <div className="success-heading">
-                <span className="success-check">✓</span>
-                <div>
-                  <h3>Upload successful</h3>
-                  <p>Your image was saved and a case record was created.</p>
-                </div>
-              </div>
-              <div className="result-grid">
-                <div className="result-item">
-                  <span>CASE ID</span>
-                  <code>{result.case_id}</code>
-                </div>
-                <div className="result-item">
-                  <span>STATUS</span>
-                  <strong className="uploaded-status">{result.status}</strong>
-                </div>
-                <div className="result-item">
-                  <span>STORED FILE</span>
-                  <code>{result.filename}</code>
-                </div>
-                <div className="result-item">
-                  <span>UPLOADED AT</span>
-                  <strong>{result.uploaded_at ? new Date(result.uploaded_at).toLocaleString() : "—"}</strong>
-                </div>
-              </div>
-              <div className="diagnosis-note">
-                <strong>Important:</strong> This MVP stores images only. It does not analyse
-                the image or provide a medical diagnosis.
-              </div>
-              <button className="secondary-button" type="button" onClick={resetForm}>Upload another image</button>
-            </section>
-          )}
+            <button className="primary-button" type="submit" disabled={!file || loading}>
+              {loading ? <><span className="spinner" /> Uploading image…</> : <>Upload image <span aria-hidden="true">→</span></>}
+            </button>
+            <p className="privacy-note"><span aria-hidden="true">▣</span> Only upload images you have permission to use. Avoid including your face or identifying details.</p>
+          </form>
         </section>
+      </section>
 
-        <div className="bottom-note">
-          <span>DERMAI DEVELOPMENT BUILD</span>
-          <span>Image upload · Validation · SQLite record</span>
+      <section className="how-section">
+        <div className="section-intro"><p className="step-label">HOW IT WORKS</p><h2>Simple by design.</h2><p>Three straightforward steps to get started.</p></div>
+        <div className="steps-grid">
+          <article className="step-card"><span className="step-number">01</span><div className="step-icon">▧</div><h3>Choose an image</h3><p>Select a clear JPG, PNG, or WEBP image from your device.</p></article>
+          <article className="step-card"><span className="step-number">02</span><div className="step-icon">↥</div><h3>Upload securely</h3><p>The image is sent to the DermAI backend for handling.</p></article>
+          <article className="step-card"><span className="step-number">03</span><div className="step-icon">✳</div><h3>Next: AI insights</h3><p>AI analysis is a separate feature and is not claimed by this upload demo.</p></article>
         </div>
-      </main>
-    </div>
+      </section>
+
+      <aside className="disclaimer"><span className="disclaimer-icon">ⓘ</span><p><strong>Important health note</strong> DermAI is an experimental project, not a medical device. Uploading an image does not provide a diagnosis. For any concerning, changing, painful, or bleeding skin spot, consult a qualified healthcare professional.</p></aside>
+      <footer className="footer"><a className="brand footer-brand" href="#top"><span className="brand-mark">✳</span><span>Derm<span className="brand-accent">AI</span></span></a><span>Built with care · Experimental demo</span></footer>
+    </main>
   );
 }
