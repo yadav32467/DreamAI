@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import "./App.css";
 
-const API_URL = "https://dermai-api-r2in.onrender.com";
+const API_URL = "http://127.0.0.1:8000";
 const MAX_SIZE = 5 * 1024 * 1024;
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 

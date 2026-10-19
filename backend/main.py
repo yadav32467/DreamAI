@@ -138,92 +138,153 @@ async def upload_image(file: UploadFile = File(...)):
 
 # AI skin-image classification endpoint (research/educational prototype only)
 
+# Experimental local EfficientNet-B0 classifier.
+# Research use only; not a medical diagnostic tool.
+
+_model = None
+_model_classes = None
+_model_device = None
+
+CLASS_NAMES = {
+    "MEL": "Melanoma",
+    "NV": "Melanocytic nevus",
+    "BCC": "Basal cell carcinoma",
+    "AKIEC": "Actinic keratoses / intraepithelial carcinoma",
+    "BKL": "Benign keratosis-like lesion",
+    "DF": "Dermatofibroma",
+    "VASC": "Vascular lesion",
+}
+
+
+def get_skin_model():
+    global _model, _model_classes, _model_device
+
+    if _model is None:
+        import torch
+        from torch import nn
+        from torchvision import models
+
+        model_path = BASE_DIR / "models" / "dermai_efficientnet_b0.pth"
+        if not model_path.is_file():
+            raise RuntimeError("Trained model file is missing.")
+
+        checkpoint = torch.load(
+            model_path, map_location="cpu", weights_only=True
+        )
+        classes = checkpoint.get("classes")
+        if not isinstance(classes, list) or len(classes) != 7:
+            raise RuntimeError("Unexpected class list in model checkpoint.")
+
+        model = models.efficientnet_b0(weights=None)
+        model.classifier[1] = nn.Linear(
+            model.classifier[1].in_features, len(classes)
+        )
+        model.load_state_dict(checkpoint["model_state_dict"])
+        model.eval()
+
+        device = torch.device(
+            "mps" if torch.backends.mps.is_available() else "cpu"
+        )
+        _model = model.to(device)
+        _model_classes = classes
+        _model_device = device
+
+    return _model, _model_classes, _model_device
+
+
 @app.post("/analyze")
 async def analyze_skin(file: UploadFile = File(...)):
-    import tempfile
-    import os
-    from pathlib import Path
-    from gradio_client import Client, handle_file
+    from io import BytesIO
+    import torch
+    from torchvision import transforms
 
     if file.content_type not in {"image/jpeg", "image/png", "image/webp"}:
-        raise HTTPException(status_code=400, detail="Upload a JPG, PNG, or WEBP image.")
+        raise HTTPException(
+            status_code=400,
+            detail="Upload a JPG, PNG, or WEBP image."
+        )
 
-    content = await file.read()
-    if not content or len(content) > 5 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="Image must be non-empty and no larger than 5 MB.")
-
-    suffix = Path(file.filename or "image.jpg").suffix.lower()
-    if suffix not in {".jpg", ".jpeg", ".png", ".webp"}:
-        suffix = ".jpg"
-
-    temp_path = None
     try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-            tmp.write(content)
-            temp_path = tmp.name
+        content = await file.read(MAX_FILE_SIZE + 1)
 
-        client = Client("Satyejeet69/SkinDiseaseClassifier")
-        result = client.predict(handle_file(temp_path), api_name="/predict")
+        if not content:
+            raise HTTPException(status_code=400, detail="The image is empty.")
+        if len(content) > MAX_FILE_SIZE:
+            raise HTTPException(
+                status_code=413,
+                detail="Image must be 5 MB or smaller."
+            )
 
-        predictions = []
+        try:
+            with Image.open(BytesIO(content)) as img:
+                if img.format not in ALLOWED_FORMATS:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Supported formats: JPEG, PNG and WEBP."
+                    )
+                img.verify()
 
-        if isinstance(result, dict):
-            raw_predictions = result.get("confidences") or []
-            for item in raw_predictions:
-                if isinstance(item, dict):
-                    label = item.get("label", "Unknown")
-                    score = item.get("confidence", 0)
-                    try:
-                        predictions.append({
-                            "label": str(label),
-                            "confidence": float(score)
-                        })
-                    except (TypeError, ValueError):
-                        continue
+            with Image.open(BytesIO(content)) as img:
+                img.load()
+                image = img.convert("RGB")
 
-            if not predictions and result.get("label") is not None:
-                predictions.append({
-                    "label": str(result["label"]),
-                    "confidence": 0.0
-                })
+        except HTTPException:
+            raise
+        except (UnidentifiedImageError, OSError, Image.DecompressionBombError):
+            raise HTTPException(
+                status_code=400,
+                detail="The uploaded file is not a valid image."
+            )
 
-        elif isinstance(result, list):
-            for item in result:
-                if isinstance(item, dict):
-                    label = item.get("label", "Unknown")
-                    score = item.get("confidence", item.get("score", 0))
-                    try:
-                        predictions.append({
-                            "label": str(label),
-                            "confidence": float(score)
-                        })
-                    except (TypeError, ValueError):
-                        continue
+        model, classes, device = get_skin_model()
 
-        else:
-            raise ValueError("Unexpected model response")
+        preprocess = transforms.Compose([
+            transforms.Resize((224, 224)),
+            transforms.ToTensor(),
+            transforms.Normalize(
+                mean=[0.485, 0.456, 0.406],
+                std=[0.229, 0.224, 0.225]
+            ),
+        ])
 
-        if not predictions:
-            raise ValueError("No predictions returned")
+        tensor = preprocess(image).unsqueeze(0).to(device)
 
-        predictions.sort(key=lambda x: x["confidence"], reverse=True)
-        if not predictions:
-            raise ValueError("No predictions returned")
+        with torch.no_grad():
+            logits = model(tensor)
+            scores = torch.softmax(logits, dim=1)[0].cpu().tolist()
+
+        ranked = sorted(
+            zip(classes, scores), key=lambda item: item[1], reverse=True
+        )[:3]
+
+        predictions = [
+            {
+                "label": CLASS_NAMES.get(code, code),
+                "class_code": code,
+                "confidence": round(float(score), 4),
+            }
+            for code, score in ranked
+        ]
 
         return {
             "prediction": predictions[0]["label"],
-            "confidence": round(predictions[0]["confidence"], 4),
-            "predictions": predictions[:3],
-            "model": "Satyejeet69/SkinDiseaseClassifier",
-            "disclaimer": "Research demo for skin-lesion images only; not a medical diagnosis."
+            "confidence": predictions[0]["confidence"],
+            "predictions": predictions,
+            "model": "DermAI EfficientNet-B0 (ISIC 2018)",
+            "disclaimer": (
+                "Experimental research classifier for skin-lesion images only. "
+                "Scores are model outputs, not medical probabilities or a diagnosis. "
+                "Not validated for clinical use; consult a qualified clinician."
+            ),
         }
+
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=502, detail="Free AI demo is temporarily unavailable or returned an unexpected result.") from exc
+        print(f"Local model analysis error: {type(exc).__name__}: {exc}")
+        raise HTTPException(
+            status_code=500,
+            detail="Local skin-image analysis failed. Check the backend terminal."
+        ) from exc
     finally:
-        if temp_path:
-            try:
-                os.unlink(temp_path)
-            except OSError:
-                pass
+        await file.close()

@@ -16,3 +16,19 @@ backend/uploads/
 node_modules/
 dist/
 .DS_Store
+
+# Local trained AI models
+backend/models/
+
+# Local backups
+*.bak
+*.backup
+*.backup-*
+*.before_local_model_backup
+backup-before-*/
+backup-polish-*/
+
+# Local database and uploaded images
+*.db
+backend/uploads/
+/package-lock.json

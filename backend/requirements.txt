@@ -6,3 +6,5 @@ python-dotenv
 huggingface_hub
 requests
 gradio_client
+torch
+torchvision
