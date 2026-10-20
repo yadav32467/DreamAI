@@ -79,6 +79,17 @@ export default function App() {
           <div><strong>01</strong><span>Choose a photo</span></div>
           <i></i><div><strong>02</strong><span>Upload safely</span></div><i></i><div><strong>03</strong><span>Explore next steps</span></div>
         </div>
+        <figure className="hero-photo-card">
+          <img
+            src="/images/dermatology-exam.jpg"
+            alt="A dermatologist examining a patient's skin with a dermatoscope"
+            loading="lazy"
+          />
+          <figcaption>
+            <span className="hero-photo-mark">✳</span>
+            <span><strong>Skin health starts with understanding.</strong><small>A thoughtful first step, alongside professional care.</small></span>
+          </figcaption>
+        </figure>
         <div className="hero-note"><span className="shield">✓</span><span><b>Your image. Your choice.</b><br/>Use a photo you have permission to share. Avoid including your face or identifying details.</span></div><a className="hero-cta" href="#analyze">Start with a photo <span>↓</span></a>
       </div>
 
