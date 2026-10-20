@@ -1,0 +1,182 @@
+/* DermAI footer — clean responsive layout */
+.site .dermai-footer {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  margin-top: 34px;
+  padding: 38px 0 0;
+  border-top: 1px solid #e3e9df;
+  color: #52685d;
+}
+
+.site .dermai-footer * {
+  box-sizing: border-box;
+}
+
+.dermai-footer .footer-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(130px, 0.65fr) minmax(170px, 0.85fr);
+  align-items: start;
+  gap: 36px;
+  padding-bottom: 32px;
+}
+
+.dermai-footer .footer-brand,
+.dermai-footer .footer-links,
+.dermai-footer .footer-disclaimer > div {
+  min-width: 0;
+}
+
+.dermai-footer .footer-logo {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-size: 22px;
+}
+
+.dermai-footer .footer-brand p {
+  max-width: 330px;
+  margin: 15px 0;
+  color: #718077;
+  font-size: 12px;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+
+.dermai-footer .footer-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #718077;
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.dermai-footer .footer-status-dot {
+  flex: 0 0 7px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #45a77c;
+}
+
+.dermai-footer .footer-links {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.dermai-footer .footer-links h3,
+.dermai-footer .footer-disclaimer h3 {
+  margin: 3px 0 5px;
+  color: #234537;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.dermai-footer .footer-links a {
+  color: #718077;
+  font-size: 11px;
+  line-height: 1.7;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.dermai-footer .footer-links a:hover,
+.dermai-footer .footer-bottom a:hover {
+  color: #25845f;
+}
+
+.dermai-footer .footer-disclaimer {
+  display: flex;
+  align-items: flex-start;
+  gap: 13px;
+  width: 100%;
+  padding: 18px 20px;
+  border: 1px solid #e8e6d3;
+  border-radius: 14px;
+  background: #fbfaf2;
+}
+
+.dermai-footer .footer-info-icon {
+  display: grid;
+  flex: 0 0 26px;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border: 1px solid #d6d4ac;
+  border-radius: 50%;
+  color: #77764f;
+  font-size: 13px;
+}
+
+.dermai-footer .footer-disclaimer h3 {
+  margin-top: 1px;
+  color: #656747;
+}
+
+.dermai-footer .footer-disclaimer p {
+  margin: 6px 0 0;
+  color: #73735b;
+  font-size: 11px;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+
+.dermai-footer .footer-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 25px;
+  padding: 19px 0 26px;
+  border-top: 1px solid #e6e9e1;
+  color: #879389;
+  font-size: 10px;
+}
+
+.dermai-footer .footer-bottom a {
+  color: #427b60;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+@media (max-width: 800px) {
+  .dermai-footer .footer-main {
+    grid-template-columns: minmax(0, 1fr) minmax(120px, 0.7fr);
+    gap: 28px;
+  }
+
+  .dermai-footer .footer-brand {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 520px) {
+  .site .dermai-footer {
+    margin-top: 24px;
+    padding-top: 28px;
+  }
+
+  .dermai-footer .footer-main {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 25px 18px;
+  }
+
+  .dermai-footer .footer-brand {
+    grid-column: 1 / -1;
+  }
+
+  .dermai-footer .footer-disclaimer {
+    padding: 14px;
+  }
+
+  .dermai-footer .footer-bottom {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
