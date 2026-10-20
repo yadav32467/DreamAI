@@ -1,7 +1,8 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import "./App.css";
+import Footer from "./Footer";
 
-const API_URL = "http://127.0.0.1:8000";
+const API_URL = (import.meta.env.VITE_API_URL || "https://dermai-api-r2in.onrender.com").replace(/\/$/, "");
 const MAX_SIZE = 5 * 1024 * 1024;
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
@@ -13,6 +14,23 @@ export default function App() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [result, setResult] = useState(null);
+  const [apiStatus, setApiStatus] = useState("Checking");
+
+  useEffect(() => {
+    let active = true;
+    async function checkApiStatus() {
+      try {
+        const response = await fetch(`${API_URL}/health`);
+        if (!response.ok) throw new Error("API unavailable");
+        if (active) setApiStatus("Connected");
+      } catch {
+        if (active) setApiStatus("Offline");
+      }
+    }
+    checkApiStatus();
+    const timer = setInterval(checkApiStatus, 30000);
+    return () => { active = false; clearInterval(timer); };
+  }, []);
 
   function chooseFile(nextFile) {
     setError(""); setMessage(""); setResult(null);
@@ -56,16 +74,16 @@ export default function App() {
       <div className="hero-left">
         <div className="pill"><span>✳</span> SKIN HEALTH, REIMAGINED</div>
         <h1>Get to know<br />your skin<span className="mint"> better.</span></h1>
-        <p className="hero-lede">A simple place to start your skin-health journey. Upload an image and let DermAI handle it through a secure connection.</p>
+        <p className="hero-lede">A clearer first step for understanding your skin. Choose a photo, preview it, and explore an experimental AI result—with your health and privacy in mind.</p>
         <div className="hero-stats">
           <div><strong>01</strong><span>Choose a photo</span></div>
           <i></i><div><strong>02</strong><span>Upload safely</span></div><i></i><div><strong>03</strong><span>Explore next steps</span></div>
         </div>
-        <div className="hero-note"><span className="shield">✓</span><span><b>Your image. Your choice.</b><br/>Only upload images you have permission to use.</span></div>
+        <div className="hero-note"><span className="shield">✓</span><span><b>Your image. Your choice.</b><br/>Use a photo you have permission to share. Avoid including your face or identifying details.</span></div><a className="hero-cta" href="#analyze">Start with a photo <span>↓</span></a>
       </div>
 
-      <div className="workspace">
-        <div className="workspace-top"><div><span className="tiny-label">DERMAI WORKSPACE</span><h2>Image check-in</h2></div><div className="secure-chip"><span>●</span> Connected</div></div>
+      <div className="workspace" id="analyze">
+        <div className="workspace-top"><div><span className="tiny-label">DERMAI WORKSPACE</span><h2>Image check-in</h2></div><div className={`secure-chip ${apiStatus === "Connected" ? "api-online" : apiStatus === "Offline" ? "api-offline" : "api-checking"}`} aria-live="polite"><span>●</span> {apiStatus}</div></div>
         <div className="upload-area">
           <input ref={inputRef} className="hidden-input" type="file" accept="image/jpeg,image/png,image/webp" onChange={e => chooseFile(e.target.files?.[0])}/>
           {!preview ? <button className="drop-area" type="button" onClick={() => inputRef.current?.click()} onDragOver={e => {e.preventDefault(); e.currentTarget.classList.add("dragging");}} onDragLeave={e => e.currentTarget.classList.remove("dragging")} onDrop={e => {e.preventDefault(); e.currentTarget.classList.remove("dragging"); chooseFile(e.dataTransfer.files?.[0]);}}>
@@ -94,9 +112,37 @@ export default function App() {
   <small>{result?.disclaimer || "Experimental research output only; not a medical diagnosis."}</small>
 </div>}
         <form onSubmit={uploadImage}><button className="submit" disabled={!file || loading}>{loading ? <><span className="spinner"></span> Uploading image…</> : <>Analyze image <span>↗</span></>}</button></form>
-        <div className="workspace-foot"><span>▣ Image upload</span><span>5 MB limit</span><span>⌁ API connected</span></div>
+        <div className="workspace-foot"><span>▣ Image upload</span><span>5 MB limit</span><span aria-live="polite">⌁ API {apiStatus.toLowerCase()}</span></div>
       </div>
       <div className="decor decor-one"></div><div className="decor decor-two"></div>
+    </section>
+
+
+    <section className="upload-guide" aria-labelledby="guide-title">
+      <div className="guide-copy">
+        <span className="tiny-label">BEFORE YOU UPLOAD</span>
+        <h2 id="guide-title">A better photo starts here.</h2>
+        <p>These quick tips can make an image easier to review. They do not guarantee an accurate result.</p>
+        <a href="#analyze" className="guide-link">Go to image upload <span>↗</span></a>
+      </div>
+      <div className="guide-tips">
+        <details>
+          <summary><span>01</span> Use clear, natural light</summary>
+          <p>Keep the image in focus and avoid strong shadows, filters, and color effects.</p>
+        </details>
+        <details>
+          <summary><span>02</span> Frame the area carefully</summary>
+          <p>Include the skin area you want to review. Avoid cropping it so tightly that useful context is lost.</p>
+        </details>
+        <details>
+          <summary><span>03</span> Protect your privacy</summary>
+          <p>Only use an image you have permission to upload. Remove faces and identifying details when possible.</p>
+        </details>
+        <details>
+          <summary><span>04</span> Check the file first</summary>
+          <p>Use JPG, PNG, or WEBP files up to 5 MB. DermAI is experimental and cannot diagnose a skin condition.</p>
+        </details>
+      </div>
     </section>
 
     <section className="how" id="how">
@@ -104,10 +150,10 @@ export default function App() {
       <div className="feature-grid">
         <article><div className="feature-top"><span className="feature-icon">↥</span><span className="number">01 / UPLOAD</span></div><h3>Bring your image</h3><p>Choose a clear photo in JPG, PNG, or WEBP format. Preview it before sending.</p></article>
         <article><div className="feature-top"><span className="feature-icon">◈</span><span className="number">02 / PROCESS</span></div><h3>Backend receives it</h3><p>Your selected image is sent to the running DermAI API with clear error handling.</p></article>
-        <article><div className="feature-top"><span className="feature-icon">✳</span><span className="number">03 / NEXT</span></div><h3>AI analysis is next</h3><p>This version handles uploads only. It does not yet generate a validated skin assessment.</p></article>
+        <article><div className="feature-top"><span className="feature-icon">✳</span><span className="number">03 / NEXT</span></div><h3>Explore your results</h3><p>Review experimental model predictions and confidence scores. These results are for research and are not a medical diagnosis.</p></article>
       </div>
     </section>
     <section className="health-note"><span className="note-icon">i</span><div><b>A note about your health</b><p>DermAI is an experimental project, not a diagnostic tool. An image upload is not a diagnosis. For a changing, painful, bleeding, or concerning skin spot, consult a qualified healthcare professional.</p></div></section>
-    <footer><a className="logo footer-logo" href="#top"><span className="logo-icon">d</span><span>derm<span>ai</span></span></a><span>Built as an experimental research prototype</span><a href="#top">Back to top ↑</a></footer>
+    <Footer />
   </main>;
 }
