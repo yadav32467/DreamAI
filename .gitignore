@@ -32,3 +32,12 @@ backup-polish-*/
 *.db
 backend/uploads/
 /package-lock.json
+
+# DermAI local research exclusions
+/research/datasets/
+/research/experiments/
+/research/results/
+/research/review_assets/
+/research/inventory/
+/research/licensing/
+/research/gate_review/

@@ -1,217 +1,200 @@
+# DermAI — AI-Powered Skin Lesion Classification
 
-# DermAI — AI-Powered Skin Lesion Image Analysis
+<p align="center">
+  <strong>An experimental AI research prototype for seven-class skin lesion image classification.</strong>
+</p>
 
-DermAI is an experimental web application that allows users to upload a skin-lesion image and receive AI-generated classification predictions through a hosted Hugging Face model.
+<p align="center">
+  <a href="https://derm-1.netlify.app/">Live Application</a> ·
+  <a href="https://dermai-api-r2in.onrender.com/docs">API Documentation</a> ·
+  <a href="https://dermai-api-r2in.onrender.com/health">API Health</a>
+</p>
 
-The project demonstrates how a React frontend, FastAPI backend, and externally hosted machine-learning model can work together in a web application.
+> **Medical disclaimer:** DermAI is an educational research prototype, not a medical device. It does not provide a diagnosis or treatment recommendation. Model scores are not calibrated medical probabilities. Always consult a qualified healthcare professional about concerning skin changes.
 
-> **Medical disclaimer:** DermAI is an educational research prototype, not a medical device. Its predictions are not a diagnosis and must not be used to make treatment decisions. Always consult a qualified healthcare professional about concerning skin changes.
+## Live Services
 
-## Live Demo
+| Component | URL |
+|---|---|
+| Web application | https://derm-1.netlify.app/ |
+| Backend API | https://dermai-api-r2in.onrender.com/ |
+| Swagger documentation | https://dermai-api-r2in.onrender.com/docs |
+| Health check | https://dermai-api-r2in.onrender.com/health |
 
-- **Frontend:** https://derm-1.netlify.app
-- **Backend API:** https://dermai-api-r2in.onrender.com
-- **API documentation:** https://dermai-api-r2in.onrender.com/docs
-- **Health check:** https://dermai-api-r2in.onrender.com/health
+## Project Overview
 
-## Features
+DermAI provides a web interface where users can select a skin-lesion image, preview it, submit it to a FastAPI backend, and receive experimental predictions from an EfficientNet-B0 image classifier.
 
-- Upload JPG, JPEG, PNG, or WEBP images.
-- Preview a selected image before analysis.
-- Validate file type and enforce a 5 MB upload limit.
-- Send images to a FastAPI backend.
-- Connect to a hosted Hugging Face image-classification model.
-- Display the predicted class, confidence score, and top predictions.
-- Show loading states and user-friendly error messages.
-- Provide a responsive interface for desktop and mobile screens.
+The current production application uses a model checkpoint stored in this repository. Research experiments for detecting non-skin images are maintained separately and have not been integrated into the live API.
+
+## Current Features
+
+- Responsive React-based interface.
+- JPG, PNG and WEBP image upload.
+- Maximum upload size of 5 MB.
+- Image preview before analysis.
+- Backend-side image validation.
+- FastAPI inference endpoint.
+- Locally loaded EfficientNet-B0 checkpoint.
+- Top-three classification predictions.
+- Model score display.
+- SQLite-backed upload record workflow.
+- API health-check endpoint.
+- Research and medical disclaimer.
 
 ## Technology Stack
 
-| Component | Technology |
+| Layer | Technology |
 |---|---|
-| Frontend | React |
+| Frontend | React 19 |
 | Frontend tooling | Vite |
 | Styling | CSS |
 | Backend | Python, FastAPI |
 | API server | Uvicorn |
-| Image upload | Multipart form data |
-| AI inference | Hugging Face Space |
-| Model client | `gradio_client` |
 | Image processing | Pillow |
-| Metadata storage | SQLite |
+| Deep learning | PyTorch, Torchvision |
+| Model architecture | EfficientNet-B0 |
+| Database | SQLite |
 | Frontend hosting | Netlify |
 | Backend hosting | Render |
+
+## Model Information
+
+The current backend loads:
+
+`backend/models/dermai_efficientnet_b0.pth`
+
+The model predicts among seven ISIC 2018 Task 3 classes:
+
+| Code | Class |
+|---|---|
+| MEL | Melanoma |
+| NV | Melanocytic nevus |
+| BCC | Basal cell carcinoma |
+| AKIEC | Actinic keratoses / intraepithelial carcinoma |
+| BKL | Benign keratosis-like lesion |
+| DF | Dermatofibroma |
+| VASC | Vascular lesion |
+
+Input preprocessing uses 224 × 224 image resizing and ImageNet normalization.
+
+**Important:** The live API currently performs seven-class classification only. It does not include the experimental non-skin/OOD rejection gate. An out-of-scope image may therefore receive one of the seven class predictions. Such an output is not evidence that the uploaded image contains a skin lesion.
 
 ## System Architecture
 
 ```text
 User
  |
- | Selects a skin-lesion image
  v
 React + Vite Frontend
  |
  | POST /analyze
  | multipart/form-data
  v
-FastAPI Backend on Render
- |
- | Validates the image
- | Creates a temporary image file
- v
-Hugging Face Space
-Satyejeet69/SkinDiseaseClassifier
- |
- | Runs image classification
- | Returns class predictions and scores
- v
 FastAPI Backend
  |
- | Formats the response as JSON
+ | Validate uploaded image
+ | Decode and preprocess
  v
-React Frontend
+EfficientNet-B0 Model
  |
- | Displays prediction and confidence
+ | Seven-class inference
+ | Top-three scores
  v
-User sees the result
+FastAPI JSON Response
+ |
+ v
+React Results Interface
 ```
 
-The frontend handles the user interface, while the backend communicates with the hosted model. The machine-learning model is not trained directly by this project's frontend.
-
-## How It Works
-
-### 1. Image selection
-
-The user selects an image from their device or drops it into the upload area.
-
-The frontend checks that:
-- The file is JPG, JPEG, PNG, or WEBP.
-- The image is no larger than 5 MB.
-
-A local preview is shown before analysis.
-
-### 2. API request
-
-When the user clicks **Analyze image**, the frontend creates a `FormData` object and sends the selected file to:
-
-```http
-POST https://dermai-api-r2in.onrender.com/analyze
-```
-
-The uploaded file is sent using the form field name `file`.
-
-### 3. Backend validation
-
-FastAPI checks the uploaded file type and size. It temporarily saves the image so that the hosted model client can process it.
-
-### 4. Hugging Face inference
-
-The backend connects to the hosted model:
-
-`Satyejeet69/SkinDiseaseClassifier`
-
-It submits the image through the model's Gradio prediction interface. The hosted model performs inference and returns classification results.
-
-### 5. Prediction response
-
-The backend converts the model response into a consistent JSON structure. The frontend then displays the top prediction and available alternative predictions.
+The experimental rejection gate is a separate research component. It is not part of this production request flow.
 
 ## API Endpoints
 
-### `GET /`
+| Method | Endpoint | Purpose |
+|---|---|---|
+| GET | `/` | API status |
+| GET | `/health` | Health check |
+| POST | `/upload` | Upload image and record metadata |
+| POST | `/analyze` | Run seven-class model inference |
+| GET | `/docs` | Swagger API documentation |
 
-Returns basic information about the API.
+### Image analysis
 
-### `GET /health`
+**Endpoint:** `POST /analyze`
 
-Checks whether the backend is responding.
-
-Example:
-
-```json
-{
-  "status": "ok"
-}
-```
-
-### `POST /upload`
-
-Accepts an image upload and handles the project's upload workflow.
-
-This endpoint is separate from AI analysis.
-
-### `POST /analyze`
-
-Sends an image to the hosted classification model and returns predictions.
-
-**Request format:** `multipart/form-data`
+**Request:** `multipart/form-data`
 
 | Field | Type | Requirement |
 |---|---|---|
 | `file` | Image file | Required |
-| Supported formats | JPG, JPEG, PNG, WEBP | Required |
-| Maximum file size | 5 MB | Required |
+| Formats | JPEG, PNG, WEBP | Supported |
+| Maximum size | 5 MB | Enforced |
 
-Example response:
+Example response structure:
 
 ```json
 {
-  "prediction": "Example_Class",
-  "confidence": 0.36,
+  "prediction": "Melanocytic nevus",
+  "confidence": 0.9915,
   "predictions": [
     {
-      "label": "Example_Class",
-      "confidence": 0.36
-    },
-    {
-      "label": "Another_Class",
-      "confidence": 0.28
+      "label": "Melanocytic nevus",
+      "class_code": "NV",
+      "confidence": 0.9915
     }
   ],
-  "model": "Satyejeet69/SkinDiseaseClassifier",
-  "disclaimer": "Research demo for skin-lesion images only; not a medical diagnosis."
+  "model": "DermAI EfficientNet-B0 (ISIC 2018)",
+  "disclaimer": "Experimental research classifier for skin-lesion images only."
 }
 ```
 
-The class names and confidence values above are illustrative examples, not a guaranteed output for every image. The actual response depends on the model's inference.
+The values are illustrative and do not represent guaranteed results.
 
-## Project Structure
+## Repository Structure
 
 ```text
 DreamAI/
+├── backend/
+│   ├── main.py
+│   ├── requirements.txt
+│   └── models/
+│       └── dermai_efficientnet_b0.pth
+│
 ├── frontend/
 │   ├── public/
 │   ├── src/
-│   │   ├── assets/
-│   │   ├── App.jsx
-│   │   ├── App.css
-│   │   ├── index.css
-│   │   └── main.jsx
 │   ├── index.html
 │   ├── package.json
 │   ├── package-lock.json
 │   └── vite.config.js
 │
-├── backend/
-│   ├── main.py
-│   ├── requirements.txt
-│   ├── uploads/        # Runtime upload storage
-│   └── database files   # Runtime data, if generated
+├── docs/
+│   ├── README.md
+│   ├── submission/
+│   │   ├── DermAI_Project_Report.pdf
+│   │   ├── DermAI_Project_Presentation.pdf
+│   │   ├── DermAI_Project_Presentation.pptx
+│   │   ├── DermAI_Dataset_Inventory_2026-10-20.md
+│   │   ├── DermAI_License_Audit_v1.md
+│   │   ├── DermAI_License_Audit_v1.xlsx
+│   │   └── MODEL_EVALUATION_SCOPE.md
+│   └── research/
+│       └── REJECTION_GATE_RESEARCH_SUMMARY.md
 │
-├── README.md
-└── .gitignore
+├── .gitignore
+└── README.md
 ```
 
-Runtime files and local data directories may be created when the application runs. They are not necessarily committed to Git.
+See [Documentation Index](docs/README.md) for the report, presentation, dataset inventory, licensing review, model evaluation scope and research summary.
 
-## Run the Project Locally
+## Run Locally
 
 ### Prerequisites
 
-Install:
 - Git
+- Python with compatible project dependencies
 - Node.js and npm
-- Python 3.10 or a compatible version supported by the dependencies
 
 ### 1. Clone the repository
 
@@ -222,143 +205,110 @@ cd DreamAI
 
 ### 2. Start the backend
 
-Open a terminal:
-
 ```bash
 cd backend
+
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+
+python -m pip install -r requirements.txt
+
 uvicorn main:app --reload --port 8000
 ```
 
-The API should be available at:
+Local API:
 
-- API: http://127.0.0.1:8000
-- Swagger UI: http://127.0.0.1:8000/docs
-- Health check: http://127.0.0.1:8000/health
+- http://127.0.0.1:8000/
+- http://127.0.0.1:8000/docs
+- http://127.0.0.1:8000/health
 
-Keep this terminal running.
+The checkpoint must be present in `backend/models/`.
 
 ### 3. Start the frontend
 
-Open a second terminal:
+Open another terminal:
 
 ```bash
-cd DreamAI/frontend
-npm install
-npm run dev
+cd frontend
+
+npm ci
+
+VITE_API_URL=http://127.0.0.1:8000 npm run dev
 ```
 
-Open the local URL printed by Vite, usually:
-
-http://localhost:5173
-
-**Note:** The current frontend is configured to call the deployed Render API. Therefore, the frontend can use the live backend while running locally. To use a local backend instead, configure the frontend API URL to point to `http://127.0.0.1:8000` and allow that frontend origin in FastAPI CORS settings.
+Open the local URL printed by Vite, normally http://localhost:5173.
 
 ## Deployment
 
-### Frontend — Netlify
+### Netlify — Frontend
 
-The frontend is deployed to Netlify.
-
-Typical build settings:
+Typical configuration:
 
 - Base directory: `frontend`
 - Build command: `npm run build`
 - Publish directory: `dist`
 
-After changing frontend code, rebuild and deploy the frontend to update the live website.
+The frontend reads the backend URL from `VITE_API_URL`. Its default is the deployed Render API.
 
-### Backend — Render
+### Render — Backend
 
-The FastAPI backend is deployed to Render.
-
-Typical settings:
+Typical configuration:
 
 - Root directory: `backend`
 - Build command: `pip install -r requirements.txt`
 - Start command: `uvicorn main:app --host 0.0.0.0 --port $PORT`
 
-After pushing backend changes to the configured Git branch, Render can deploy the updated API.
+The backend requires its Python dependencies and model checkpoint.
 
-### Hugging Face model
+Verify actual deployment settings in the Netlify and Render dashboards.
 
-The application uses the hosted Space:
+## Research and Evaluation
 
-https://huggingface.co/spaces/Satyejeet69/SkinDiseaseClassifier
+The project includes research activities covering:
 
-Model availability, response time, and inference behavior depend on that external service. A sleeping, busy, unavailable, or changed Space can cause analysis requests to fail.
+- ISIC 2018 Task 3 dataset preparation.
+- EfficientNet-B0 training experiments.
+- Model evaluation and checkpoint provenance.
+- Open Images out-of-distribution experiments.
+- Binary rejection-gate experiments.
+- Hard-negative experiments.
+- Five-seed split-stability checks.
+- NINCO external diagnostic pilot.
 
-## Configuration and Security
+The current rejection gate remains experimental and is not integrated into the live backend.
 
-- The frontend currently uses a configured backend URL in `frontend/src/App.jsx`.
-- FastAPI CORS must allow the frontend origins that need API access.
-- Uploaded images should be handled carefully because they may contain sensitive health information.
-- Do not commit `.env` files, access tokens, credentials, private images, or local database files.
-- Validate file types and size on the backend, even when the frontend already performs validation.
-- Temporary images should be removed after inference when no longer needed.
-- Production deployments should use appropriate access controls, retention policies, and secure logging.
+The NINCO pilot used a small representative sample. Its results are diagnostic evidence, not a full benchmark or final confirmatory evaluation.
 
-## Troubleshooting
+See [Rejection Gate Research Summary](research/REJECTION_GATE_RESEARCH_SUMMARY.md).
 
-### The frontend cannot connect to the API
+## Dataset and Licensing
 
-1. Check the backend health endpoint.
-2. Confirm the API URL in `frontend/src/App.jsx`.
-3. Check browser DevTools → Network and Console.
-4. Verify the frontend origin is allowed by FastAPI CORS.
+Dataset provenance and licensing are documented separately in the `docs/submission/` directory.
 
-### Analysis returns an error
+Underlying image-level rights and commercial-use permission have not been established for all research datasets. A dataset-level license listing does not automatically establish permission for every underlying image.
 
-1. Open the backend Swagger UI.
-2. Test `POST /analyze` with a supported image.
-3. Check the Render logs for backend or Hugging Face errors.
-4. Verify that the Hugging Face Space is available.
+Commercial use is not approved unless the applicable rights have been independently verified.
 
-### The first request is slow
+No repository-wide software license is currently declared. Do not assume third-party images or datasets are covered by this repository's source-code permissions.
 
-A free hosting service may need time to wake up. External model inference can also take time.
+## Privacy and Security
 
-### Build the frontend
-
-```bash
-cd frontend
-npm run build
-```
-
-The production files are generated in `frontend/dist`.
+- Do not commit `.env` files, passwords, API tokens or credentials.
+- Do not commit private user images or local database files.
+- Upload only images you have permission to share.
+- Avoid uploading faces and identifying details.
+- Validate file type and size on the backend.
+- Review retention and access controls before real-world use.
 
 ## Current Limitations
 
-- The project relies on an externally hosted model rather than a model trained and hosted entirely within this repository.
-- The model's clinical performance has not been independently validated by this application.
-- Results may be unreliable for images that differ from the model's training data.
-- A classification score is not a calibrated probability of disease and does not establish diagnostic certainty.
-- The application is not a substitute for examination by a qualified clinician.
-- Availability and latency depend partly on the external model service and free hosting tiers.
-
-## Future Improvements
-
-- Add automated frontend and backend tests.
-- Improve request timeout handling and error reporting.
-- Add configurable API URLs for local and production environments.
-- Improve accessibility and mobile usability.
-- Add privacy-conscious monitoring and upload-retention controls.
-- Evaluate the model on appropriate, independently validated datasets before making clinical claims.
-
-## Contributing
-
-1. Fork the repository.
-2. Create a feature branch.
-3. Make a focused change.
-4. Run the frontend build and test the affected backend endpoint.
-5. Open a pull request with a clear description of the change.
-
-## License
-
-Add the appropriate license file and update this section before distributing the project. No license should be assumed unless one is actually present in the repository.
+- Seven-class skin-lesion classification only.
+- No production non-skin rejection gate.
+- No established clinical validation.
+- Model scores are not calibrated medical probabilities.
+- Performance on arbitrary real-world images has not been established.
+- External evaluation is limited to the datasets and samples documented in the research materials.
 
 ---
 
-**DermAI is an experimental educational project. Predictions are for research demonstration only and must not be used as a medical diagnosis.**
+**DermAI is an experimental educational research project, not a medical diagnostic tool.**
