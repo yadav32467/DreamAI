@@ -173,8 +173,6 @@ DreamAI/
 │   ├── README.md
 │   ├── submission/
 │   │   ├── DermAI_Project_Report.pdf
-│   │   ├── DermAI_Project_Presentation.pdf
-│   │   ├── DermAI_Project_Presentation.pptx
 │   │   ├── DermAI_Dataset_Inventory_2026-10-20.md
 │   │   ├── DermAI_License_Audit_v1.md
 │   │   ├── DermAI_License_Audit_v1.xlsx
@@ -186,7 +184,7 @@ DreamAI/
 └── README.md
 ```
 
-See [Documentation Index](docs/README.md) for the report, presentation, dataset inventory, licensing review, model evaluation scope and research summary.
+See [Documentation Index](docs/README.md) for the project report, dataset inventory, licensing review, model evaluation scope and research summary.
 
 ## Run Locally
 

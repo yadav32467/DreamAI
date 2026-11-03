@@ -7,8 +7,6 @@ This directory contains curated project documentation and research summaries.
 | Document | Description |
 |---|---|
 | [Project Report](submission/DermAI_Project_Report.pdf) | Formal project report |
-| [Project Presentation — PDF](submission/DermAI_Project_Presentation.pdf) | Presentation for viewing |
-| [Project Presentation — PPTX](submission/DermAI_Project_Presentation.pptx) | Editable presentation |
 | [Dataset Inventory](submission/DermAI_Dataset_Inventory_2026-10-20.md) | Dataset inventory and provenance |
 | [License Audit](submission/DermAI_License_Audit_v1.md) | Dataset licensing review |
 | [License Audit — XLSX](submission/DermAI_License_Audit_v1.xlsx) | Editable licensing matrix |
