@@ -6,7 +6,10 @@ python-dotenv
 huggingface_hub
 requests
 gradio_client
-torch
-torchvision
+
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.15.0+cpu
+torchvision==0.29.2+cpu
+
 scikit-learn==1.9.1
 joblib==1.6.0
