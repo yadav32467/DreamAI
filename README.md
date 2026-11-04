@@ -25,7 +25,7 @@
 
 DermAI provides a web interface where users can select a skin-lesion image, preview it, submit it to a FastAPI backend, and receive experimental predictions from an EfficientNet-B0 image classifier.
 
-The current production application uses a model checkpoint stored in this repository. Research experiments for detecting non-skin images are maintained separately and have not been integrated into the live API.
+The application uses a local EfficientNet-B0 classifier preceded by an experimental image-suitability gate. The gate is a research filter, not a clinically validated OOD detector, and it can reject valid skin images or pass some unrelated images.
 
 ## Current Features
 
@@ -36,7 +36,8 @@ The current production application uses a model checkpoint stored in this reposi
 - Backend-side image validation.
 - FastAPI inference endpoint.
 - Locally loaded EfficientNet-B0 checkpoint.
-- Top-three classification predictions.
+- Experimental pre-classifier image-suitability check using a frozen binary gate.
+- Top-three classification predictions for images accepted by the gate.
 - Model score display.
 - SQLite-backed upload record workflow.
 - API health-check endpoint.
@@ -78,7 +79,7 @@ The model predicts among seven ISIC 2018 Task 3 classes:
 
 Input preprocessing uses 224 × 224 image resizing and ImageNet normalization.
 
-**Important:** The live API currently performs seven-class classification only. It does not include the experimental non-skin/OOD rejection gate. An out-of-scope image may therefore receive one of the seven class predictions. Such an output is not evidence that the uploaded image contains a skin lesion.
+**Important:** The live API runs an experimental suitability gate before seven-class classification. It is not a guarantee that every unrelated image will be rejected; some OOD images passed in research evaluation. It can also reject valid skin images. Never interpret any output as a diagnosis.
 
 ## System Architecture
 
@@ -96,7 +97,13 @@ FastAPI Backend
  | Validate uploaded image
  | Decode and preprocess
  v
-EfficientNet-B0 Model
+EfficientNet-B0 pooled embedding
+ |
+ v
+Experimental StandardScaler + LogisticRegression gate
+ | accepted only
+ v
+EfficientNet-B0 seven-class head
  |
  | Seven-class inference
  | Top-three scores
@@ -107,7 +114,7 @@ FastAPI JSON Response
 React Results Interface
 ```
 
-The experimental rejection gate is a separate research component. It is not part of this production request flow.
+The gate uses a frozen V1 artifact and threshold 0.8454478979. Its experimental benchmark results are limited to the documented ISIC, Open Images and NINCO samples. It is not clinical validation or a universal non-skin detector.
 
 ## API Endpoints
 
@@ -116,7 +123,7 @@ The experimental rejection gate is a separate research component. It is not part
 | GET | `/` | API status |
 | GET | `/health` | Health check |
 | POST | `/upload` | Upload image and record metadata |
-| POST | `/analyze` | Run seven-class model inference |
+| POST | `/analyze` | Run experimental suitability check, then seven-class inference if accepted |
 | GET | `/docs` | Swagger API documentation |
 
 ### Image analysis
@@ -159,7 +166,9 @@ DreamAI/
 │   ├── main.py
 │   ├── requirements.txt
 │   └── models/
-│       └── dermai_efficientnet_b0.pth
+│       ├── dermai_efficientnet_b0.pth
+│       ├── experimental_binary_gate.joblib
+│       └── EXPERIMENTAL_GATE_MODEL_CARD.md
 │
 ├── frontend/
 │   ├── public/
@@ -273,7 +282,7 @@ The project includes research activities covering:
 - Five-seed split-stability checks.
 - NINCO external diagnostic pilot.
 
-The current rejection gate remains experimental and is not integrated into the live backend.
+The frozen V1 rejection gate is integrated as an experimental pre-classifier filter. It remains research-only and has not been clinically validated.
 
 The NINCO pilot used a small representative sample. Its results are diagnostic evidence, not a full benchmark or final confirmatory evaluation.
 
@@ -301,7 +310,7 @@ No repository-wide software license is currently declared. Do not assume third-p
 ## Current Limitations
 
 - Seven-class skin-lesion classification only.
-- No production non-skin rejection gate.
+- The experimental gate is not a validated universal non-skin detector.
 - No established clinical validation.
 - Model scores are not calibrated medical probabilities.
 - Performance on arbitrary real-world images has not been established.

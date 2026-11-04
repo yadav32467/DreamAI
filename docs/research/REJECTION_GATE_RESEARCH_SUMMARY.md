@@ -1,6 +1,6 @@
 # DermAI — Rejection Gate Research Summary
 
-**Status: Promising experimental research; not approved for production.**
+**Status: Experimental research gate integrated as a research-preview pre-classifier filter; not clinically validated.**
 
 ## Active Model Reference
 
@@ -88,8 +88,6 @@ NINCO is now a diagnostic pilot, not a pristine confirmatory holdout.
 
 ## Decision
 
-The rejection gate remains an experimental research component.
-
-**It is not integrated into the live backend and is not approved for production.**
+The frozen V1 gate is now loaded by the FastAPI `/analyze` path before the seven-class classifier. The deployed integration is an experimental research-preview filter only. It must not be described as a clinically validated or universal OOD safeguard. The five NINCO false accepts and six Open Images category-holdout false accepts remain important evidence that unrelated images can still pass.
 
 The next milestone is an independent external confirmatory OOD evaluation using new sources and broader visual domains, with an untouched test subset not used for training, threshold tuning, model selection or error inspection.

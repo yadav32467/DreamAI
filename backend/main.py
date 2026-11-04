@@ -2,6 +2,7 @@
 import os
 import uuid
 import sqlite3
+import hashlib
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -155,6 +156,47 @@ CLASS_NAMES = {
     "VASC": "Vascular lesion",
 }
 
+# Experimental input-suitability gate. This is a research filter, not a
+# validated image-quality model and not a guarantee against all OOD inputs.
+GATE_THRESHOLD = 0.8454478979
+EXPECTED_CHECKPOINT_SHA256 = "643bc587d2734a3aaa558d03d55025ffdb50e66307fa83a21422358bb08e71ba"
+EXPECTED_GATE_SHA256 = "3909915a21b9e576c1be49e3d718cb4a69b216d5a66ba777d0a52839c4e2dae4"
+_gate_pipeline = None
+
+
+def get_rejection_gate():
+    """Load the frozen V1 gate and verify its model/artifact provenance."""
+    global _gate_pipeline
+
+    if _gate_pipeline is None:
+        import joblib
+
+        checkpoint_path = BASE_DIR / "models" / "dermai_efficientnet_b0.pth"
+        gate_path = BASE_DIR / "models" / "experimental_binary_gate.joblib"
+
+        if not checkpoint_path.is_file() or not gate_path.is_file():
+            raise RuntimeError("The experimental image-suitability model files are missing.")
+
+        checkpoint_sha = hashlib.sha256(checkpoint_path.read_bytes()).hexdigest()
+        if checkpoint_sha != EXPECTED_CHECKPOINT_SHA256:
+            raise RuntimeError("The EfficientNet checkpoint does not match the gate's training checkpoint.")
+
+        gate_sha = hashlib.sha256(gate_path.read_bytes()).hexdigest()
+        if gate_sha != EXPECTED_GATE_SHA256:
+            raise RuntimeError("The experimental gate artifact failed its SHA256 integrity check.")
+
+        pipeline = joblib.load(gate_path)
+        if list(getattr(pipeline, "named_steps", {}).keys()) != ["standardscaler", "logisticregression"]:
+            raise RuntimeError("Unexpected experimental gate pipeline structure.")
+        if getattr(pipeline, "n_features_in_", None) != 1280:
+            raise RuntimeError("Experimental gate feature dimensions do not match EfficientNet-B0.")
+        if [int(value) for value in pipeline.classes_] != [0, 1]:
+            raise RuntimeError("Unexpected gate classes; expected 0=OOD and 1=in-scope skin.")
+
+        _gate_pipeline = pipeline
+
+    return _gate_pipeline
+
 
 def get_skin_model():
     global _model, _model_classes, _model_device
@@ -247,10 +289,50 @@ async def analyze_skin(file: UploadFile = File(...)):
             ),
         ])
 
+        # Fail closed if the experimental suitability model is missing,
+        # incompatible, or not tied to the active EfficientNet checkpoint.
+        try:
+            gate_pipeline = get_rejection_gate()
+        except Exception as exc:
+            print(f"Experimental gate unavailable: {type(exc).__name__}: {exc}")
+            raise HTTPException(
+                status_code=503,
+                detail="The experimental image-suitability check is unavailable. Analysis was stopped safely.",
+            ) from exc
+
         tensor = preprocess(image).unsqueeze(0).to(device)
 
+        # Match the research feature extraction exactly:
+        # EfficientNet features -> average pooling -> flatten (1280 values).
         with torch.no_grad():
-            logits = model(tensor)
+            feature_map = model.features(tensor)
+            pooled = model.avgpool(feature_map)
+            embeddings = torch.flatten(pooled, 1)
+
+            gate_features = embeddings.detach().cpu().numpy().astype("float32", copy=False)
+            gate_score = float(gate_pipeline.predict_proba(gate_features)[0, 1])
+
+            if gate_score < GATE_THRESHOLD:
+                return {
+                    "status": "rejected",
+                    "accepted": False,
+                    "message": (
+                        "The experimental image-suitability check could not confirm that this is an in-scope skin image. "
+                        "Please try a clear, close-up skin photo."
+                    ),
+                    "gate": {
+                        "version": "active_checkpoint_gate_v1",
+                        "skin_score": round(gate_score, 6),
+                        "threshold": GATE_THRESHOLD,
+                        "decision": "rejected",
+                    },
+                    "disclaimer": (
+                        "This experimental filter can reject valid skin images and can still miss some unrelated images. "
+                        "Its score is not a medical probability and it is not clinically validated."
+                    ),
+                }
+
+            logits = model.classifier(embeddings)
             scores = torch.softmax(logits, dim=1)[0].cpu().tolist()
 
         ranked = sorted(
@@ -267,14 +349,21 @@ async def analyze_skin(file: UploadFile = File(...)):
         ]
 
         return {
+            "status": "accepted",
+            "accepted": True,
+            "gate": {
+                "version": "active_checkpoint_gate_v1",
+                "skin_score": round(gate_score, 6),
+                "threshold": GATE_THRESHOLD,
+                "decision": "accepted",
+            },
             "prediction": predictions[0]["label"],
             "confidence": predictions[0]["confidence"],
             "predictions": predictions,
             "model": "DermAI EfficientNet-B0 (ISIC 2018)",
             "disclaimer": (
-                "Experimental research classifier for skin-lesion images only. "
-                "Scores are model outputs, not medical probabilities or a diagnosis. "
-                "Not validated for clinical use; consult a qualified clinician."
+                "The experimental suitability gate accepted this image, but this does not prove it is a skin lesion. "
+                "Classifier scores are not medical probabilities or a diagnosis. This research prototype is not clinically validated."
             ),
         }
 

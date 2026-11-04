@@ -19,6 +19,10 @@ This directory contains curated project documentation and research summaries.
 ## Important Status
 
 - The live application uses a seven-class EfficientNet-B0 classifier.
-- The experimental rejection gate is not integrated into production.
+- The frozen V1 suitability gate is integrated as an experimental pre-classifier filter; it is not clinically validated or a universal OOD detector.
 - Clinical validation has not been established.
 - Underlying image licensing and commercial-use restrictions must be checked before reuse.
+
+## Model Artifact
+
+- [Experimental Gate Model Card](../backend/models/EXPERIMENTAL_GATE_MODEL_CARD.md) — frozen research gate, provenance, threshold and limitations.

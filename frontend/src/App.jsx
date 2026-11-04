@@ -56,7 +56,7 @@ export default function App() {
       let data;
       try { data = raw ? JSON.parse(raw) : {}; } catch { data = { detail: raw }; }
       if (!response.ok) throw new Error(data.detail || data.message || `Upload failed (${response.status})`);
-      setResult(data); setMessage("AI analysis complete");
+      setResult(data); setMessage(data.status === "rejected" ? "Image check needs attention" : "AI analysis complete");
     } catch (err) {
       setError(err instanceof TypeError
         ? "Could not connect. The free backend may be waking up—wait 30–60 seconds and retry."
@@ -104,22 +104,35 @@ export default function App() {
           </button> : <div className="preview-panel"><img src={preview} alt="Selected skin image preview"/><div className="preview-caption"><span className="file-icon">IMG</span><span className="filename"><b>{file?.name}</b><small>{(file.size/1024/1024).toFixed(2)} MB · Ready</small></span><button type="button" className="remove" onClick={resetUpload} aria-label="Remove image">×</button></div></div>}
         </div>
         {error && <div className="feedback error" role="alert"><b>Upload needs attention</b><span>{error}</span></div>}
-        {message && <div className="feedback success analysis-result" role="status">
-  <b>✓ {message}</b>
-  <div className="result-primary">
-    <span>Top prediction</span>
-    <strong>{String(result?.prediction || "Result unavailable").replaceAll("_", " ")}</strong>
-    {Number.isFinite(Number(result?.confidence)) && result?.confidence != null &&
-      <small>Model confidence: {(Number(result.confidence) * 100).toFixed(1)}%</small>}
-  </div>
-  {Array.isArray(result?.predictions) && result.predictions.length > 0 &&
-    <div className="prediction-list">
-      <b>Top predictions</b>
-      {result.predictions.map((item, index) => <div className="prediction-row" key={`${item.label}-${index}`}>
-        <span>{String(item.label || "Unknown").replaceAll("_", " ")}</span>
-        <span>{(Number(item.confidence || 0) * 100).toFixed(1)}%</span>
-      </div>)}
-    </div>}
+        {message && <div className={`feedback ${result?.status === "rejected" ? "warning" : "success"} analysis-result`} role="status">
+  <b>{result?.status === "rejected" ? "⚠ Image not accepted for classification" : `✓ ${message}`}</b>
+  {result?.status === "rejected" ? (
+    <div className="gate-rejected">
+      <p>{result.message || "This image could not be accepted by the experimental suitability check."}</p>
+      {Number.isFinite(Number(result?.gate?.skin_score)) &&
+        <small>Gate score: {Number(result.gate.skin_score).toFixed(4)} · cutoff: {Number(result.gate.threshold).toFixed(4)}</small>}
+      <p className="gate-caveat">A valid skin image can be rejected, and some unrelated images may still pass. Try a clear close-up image. This check is experimental, not a diagnosis.</p>
+    </div>
+  ) : (
+    <>
+      {Number.isFinite(Number(result?.gate?.skin_score)) &&
+        <div className="gate-passed">Experimental image-suitability check passed · score {Number(result.gate.skin_score).toFixed(4)} · cutoff {Number(result.gate.threshold).toFixed(4)}. This score is not a medical probability.</div>}
+      <div className="result-primary">
+        <span>Top prediction</span>
+        <strong>{String(result?.prediction || "Result unavailable").replaceAll("_", " ")}</strong>
+        {Number.isFinite(Number(result?.confidence)) && result?.confidence != null &&
+          <small>Model confidence: {(Number(result.confidence) * 100).toFixed(1)}%</small>}
+      </div>
+      {Array.isArray(result?.predictions) && result.predictions.length > 0 &&
+        <div className="prediction-list">
+          <b>Top predictions</b>
+          {result.predictions.map((item, index) => <div className="prediction-row" key={`${item.label}-${index}`}>
+            <span>{String(item.label || "Unknown").replaceAll("_", " ")}</span>
+            <span>{(Number(item.confidence || 0) * 100).toFixed(1)}%</span>
+          </div>)}
+        </div>}
+    </>
+  )}
   <small>{result?.disclaimer || "Experimental research output only; not a medical diagnosis."}</small>
 </div>}
         <form onSubmit={uploadImage}><button className="submit" disabled={!file || loading}>{loading ? <><span className="spinner"></span> Uploading image…</> : <>Analyze image <span>↗</span></>}</button></form>
