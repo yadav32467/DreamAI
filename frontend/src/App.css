@@ -816,3 +816,19 @@ button:focus-visible, a:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+/* Persistent browser-history notice */
+.app-site .storage-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: -12px 0 22px;
+  padding: 13px 16px;
+  border: 1px solid #ead7ad;
+  border-radius: 12px;
+  background: #fff9e9;
+  color: #795d2b;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.app-site .storage-notice b { color: #684b1d; }

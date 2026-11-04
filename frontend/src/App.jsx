@@ -34,6 +34,76 @@ function gateValue(result, key) {
   return Number.isFinite(value) ? value : null;
 }
 
+// Completed cases are stored locally in IndexedDB. Images never leave this browser
+// as part of history storage; only the normal /analyze request reaches the API.
+const HISTORY_DB_NAME = "dermai-local-history";
+const HISTORY_DB_VERSION = 1;
+const HISTORY_STORE_NAME = "analyses";
+const ACTIVE_CASE_STORAGE_KEY = "dermai-active-analysis-id";
+
+function persistActiveCaseId(id) {
+  try {
+    if (id) window.localStorage.setItem(ACTIVE_CASE_STORAGE_KEY, id);
+    else window.localStorage.removeItem(ACTIVE_CASE_STORAGE_KEY);
+  } catch {
+    // The analysis history still works even if the browser blocks localStorage.
+  }
+}
+
+function openHistoryDatabase() {
+  return new Promise((resolve, reject) => {
+    if (!("indexedDB" in window)) {
+      reject(new Error("This browser does not support local analysis history."));
+      return;
+    }
+
+    const request = window.indexedDB.open(HISTORY_DB_NAME, HISTORY_DB_VERSION);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(HISTORY_STORE_NAME)) {
+        db.createObjectStore(HISTORY_STORE_NAME, { keyPath: "id" });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error("Could not open local analysis history."));
+    request.onblocked = () => reject(new Error("Local analysis history is busy in another browser tab."));
+  });
+}
+
+async function runHistoryRequest(mode, method, value) {
+  const db = await openHistoryDatabase();
+
+  return new Promise((resolve, reject) => {
+    let result;
+    let settled = false;
+    const finishError = (error) => {
+      if (settled) return;
+      settled = true;
+      db.close();
+      reject(error || new Error("Local analysis history could not be updated."));
+    };
+
+    let transaction;
+    try {
+      transaction = db.transaction(HISTORY_STORE_NAME, mode);
+      const store = transaction.objectStore(HISTORY_STORE_NAME);
+      const request = value === undefined ? store[method]() : store[method](value);
+      request.onsuccess = () => { result = request.result; };
+      request.onerror = () => finishError(request.error);
+      transaction.oncomplete = () => {
+        if (settled) return;
+        settled = true;
+        db.close();
+        resolve(result);
+      };
+      transaction.onerror = () => finishError(transaction.error);
+      transaction.onabort = () => finishError(transaction.error);
+    } catch (error) {
+      finishError(error);
+    }
+  });
+}
+
 export default function App() {
   const inputRef = useRef(null);
   const objectUrlsRef = useRef(new Set());
@@ -44,6 +114,8 @@ export default function App() {
   const [error, setError] = useState("");
   const [apiStatus, setApiStatus] = useState("Checking");
   const [history, setHistory] = useState([]);
+  const [historyReady, setHistoryReady] = useState(false);
+  const [storageError, setStorageError] = useState("");
   const [activeCaseId, setActiveCaseId] = useState(null);
   const [dragging, setDragging] = useState(false);
 
@@ -70,6 +142,49 @@ export default function App() {
       active = false;
       window.clearInterval(timer);
     };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function restoreHistory() {
+      try {
+        const savedRecords = await runHistoryRequest("readonly", "getAll");
+        if (cancelled) return;
+
+        savedRecords.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        const recordsToKeep = savedRecords.slice(0, MAX_HISTORY);
+        const restored = recordsToKeep.map((record) => {
+          const previewUrl = URL.createObjectURL(record.imageBlob);
+          objectUrlsRef.current.add(previewUrl);
+          return { ...record, preview: previewUrl };
+        });
+
+        setHistory(restored);
+
+        // Restore the report that was open before the page was refreshed.
+        let lastActiveId = null;
+        try { lastActiveId = window.localStorage.getItem(ACTIVE_CASE_STORAGE_KEY); } catch {}
+        if (lastActiveId && restored.some((record) => record.id === lastActiveId)) {
+          setActiveCaseId(lastActiveId);
+        } else if (lastActiveId) {
+          persistActiveCaseId(null);
+        }
+
+        // Keep the persistent store bounded to the same limit shown in the UI.
+        const expiredIds = savedRecords.slice(MAX_HISTORY).map((record) => record.id);
+        await Promise.all(expiredIds.map((id) => runHistoryRequest("readwrite", "delete", id).catch(() => undefined)));
+      } catch (error) {
+        if (!cancelled) {
+          setStorageError(error?.message || "Saved analysis history could not be restored.");
+        }
+      } finally {
+        if (!cancelled) setHistoryReady(true);
+      }
+    }
+
+    restoreHistory();
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
@@ -100,11 +215,13 @@ export default function App() {
     if (loading) return;
     clearDraft();
     setActiveCaseId(null);
+    persistActiveCaseId(null);
   }
 
   function chooseFile(nextFile) {
     setError("");
     setActiveCaseId(null);
+    persistActiveCaseId(null);
 
     if (!nextFile) return;
 
@@ -139,19 +256,30 @@ export default function App() {
     setError("");
     if (inputRef.current) inputRef.current.value = "";
     setActiveCaseId(item.id);
+    persistActiveCaseId(item.id);
   }
 
   function removeCase(id) {
     const item = history.find((entry) => entry.id === id);
     if (item) revokePreview(item.preview);
     setHistory((current) => current.filter((entry) => entry.id !== id));
-    if (activeCaseId === id) setActiveCaseId(null);
+    if (activeCaseId === id) {
+      setActiveCaseId(null);
+      persistActiveCaseId(null);
+    }
+    runHistoryRequest("readwrite", "delete", id).catch((error) => {
+      setStorageError(error?.message || "Could not remove this saved case from browser storage.");
+    });
   }
 
   function clearHistory() {
     history.forEach((item) => revokePreview(item.preview));
     setHistory([]);
     setActiveCaseId(null);
+    persistActiveCaseId(null);
+    runHistoryRequest("readwrite", "clear").catch((error) => {
+      setStorageError(error?.message || "Could not clear saved browser history.");
+    });
   }
 
   async function uploadImage(event) {
@@ -195,16 +323,33 @@ export default function App() {
         fileName: selectedFile.name,
         fileSize: selectedFile.size,
         preview: selectedPreview,
+        imageBlob: selectedFile,
         createdAt: new Date().toISOString(),
         result: data,
       };
 
+      try {
+        await runHistoryRequest("readwrite", "put", {
+          id: record.id,
+          fileName: record.fileName,
+          fileSize: record.fileSize,
+          imageBlob: selectedFile,
+          createdAt: record.createdAt,
+          result: data,
+        });
+        setStorageError("");
+      } catch (storageFailure) {
+        setStorageError("Analysis completed, but this browser could not save it for future visits: " + (storageFailure?.message || "storage unavailable"));
+      }
+
       const nextHistory = [record, ...history];
       const removed = nextHistory.slice(MAX_HISTORY);
       removed.forEach((item) => revokePreview(item.preview));
+      await Promise.all(removed.map((item) => runHistoryRequest("readwrite", "delete", item.id).catch(() => undefined)));
 
       setHistory(nextHistory.slice(0, MAX_HISTORY));
       setActiveCaseId(record.id);
+      persistActiveCaseId(record.id);
       setFile(null);
       setPreview("");
       if (inputRef.current) inputRef.current.value = "";
@@ -252,12 +397,18 @@ export default function App() {
         <div>
           <div className="eyebrow"><span className="eyebrow-mark">✳</span> DERMATOLOGY IMAGE RESEARCH</div>
           <h1>Your skin analysis <span>workspace.</span></h1>
-          <p>Review one image at a time. Each completed analysis stays in your session history so you can revisit a result and start another case.</p>
+          <p>Review one image at a time. Completed analyses are saved on this device so you can revisit a result after refresh and start another case.</p>
         </div>
         <button className="button button-primary heading-new-button" type="button" onClick={startNewAnalysis} disabled={loading}>
           <span className="button-plus">＋</span> New analysis
         </button>
       </section>
+
+      {storageError && (
+        <div className="storage-notice" role="status">
+          <b>Browser history notice</b><span>{storageError}</span>
+        </div>
+      )}
 
       <div className="dashboard-grid">
         <section className="main-column" aria-label="Image analysis workspace">
@@ -335,7 +486,7 @@ export default function App() {
 
               <div className="upload-assurance">
                 <span className="assurance-icon">♢</span>
-                <div><b>One image, one analysis</b><p>After the result is ready, start a new analysis to review another image. Your previous result will remain in this tab's session history.</p></div>
+                <div><b>One image, one analysis</b><p>Completed analyses are saved in this browser so you can return to them after refreshing or reopening the site.</p></div>
               </div>
             </div>
           ) : (
@@ -428,11 +579,17 @@ export default function App() {
               <span className="history-count">{history.length}</span>
             </div>
 
-            {history.length === 0 ? (
+            {!historyReady ? (
+              <div className="history-empty">
+                <span className="history-empty-icon">◌</span>
+                <b>Restoring saved analyses…</b>
+                <p>Loading your cases from this browser.</p>
+              </div>
+            ) : history.length === 0 ? (
               <div className="history-empty">
                 <span className="history-empty-icon">▤</span>
                 <b>No analyses yet</b>
-                <p>Your completed image analyses will appear here. You can return to any result during this session.</p>
+                <p>Your completed image analyses will appear here, including after you refresh this page.</p>
               </div>
             ) : (
               <div className="history-list">
@@ -458,7 +615,7 @@ export default function App() {
             {history.length > 0 && (
               <button className="clear-history" type="button" onClick={clearHistory}>Clear session history</button>
             )}
-            <div className="history-privacy"><span>♢</span><p>History is kept only in this browser tab. It clears when you refresh or close the page.</p></div>
+            <div className="history-privacy"><span>♢</span><p>Saved on this device in this browser. Your completed cases remain after refresh and browser restart. They are removed when you delete them, clear history, or clear this site's browser data.</p></div>
           </section>
 
           <section className="panel tips-panel">
